@@ -76,7 +76,7 @@ async def health_check():
             "status": "healthy",
             "service": "trip-planner",
             "agent_name": "LangGraphTripPlanner",
-            "workflow_nodes": ["search_attractions", "search_weather", "search_hotels", "generate_plan"]
+            "workflow_nodes": ["dispatch", "attraction_scout", "hotel_scout", "food_scout", "weather_node", "builder", "critic"]
         }
     except Exception as e:
         raise HTTPException(

@@ -153,7 +153,7 @@ async def health_check():
         return {
             "status": "healthy",
             "service": "map-service",
-            "mcp_tools_count": len(service.mcp_tool._available_tools)
+            "amap_capabilities": ["search_poi", "get_weather", "plan_route", "geocode", "get_poi_detail"]
         }
     except Exception as e:
         raise HTTPException(

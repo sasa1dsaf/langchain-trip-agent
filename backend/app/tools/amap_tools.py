@@ -47,6 +47,26 @@ def search_hotels(city: str, keywords: str = "酒店") -> str:
 
 
 @tool
+def search_restaurants(city: str, keywords: str = "美食") -> str:
+    """
+    搜索餐厅/美食
+
+    Args:
+        city: 城市名称
+        keywords: 搜索关键词，默认为"美食"
+
+    Returns:
+        JSON格式的餐厅列表
+    """
+    try:
+        amap_service = get_amap_service()
+        result = amap_service.search_poi_sync(keywords, city)
+        return result
+    except Exception as e:
+        return json.dumps({"error": str(e), "data": []})
+
+
+@tool
 def get_weather(city: str) -> str:
     """
     查询天气
@@ -75,5 +95,6 @@ def get_amap_tools() -> List[BaseTool]:
     return [
         search_attractions,
         search_hotels,
+        search_restaurants,
         get_weather
     ]

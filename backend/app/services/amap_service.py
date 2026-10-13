@@ -1,6 +1,7 @@
 """高德地图服务封装 - 直接调用HTTP API"""
 
 import json
+import time
 from typing import List, Dict, Any, Optional
 import httpx
 from ..config import get_settings
@@ -19,9 +20,32 @@ class AmapService:
         self.api_key = settings.amap_api_key
         self.base_url = "https://restapi.amap.com/v3"
         self.client = httpx.AsyncClient(timeout=30)
-        
+
+        # 工具结果内存缓存: key -> (缓存时间戳, JSON字符串); 失败结果不入缓存
+        self._cache: Dict[str, tuple] = {}
+        # 各操作的缓存有效期(秒)
+        self._cache_ttl: Dict[str, int] = {
+            "poi": 3600,      # POI数据变化慢,缓存1小时
+            "weather": 1800,  # 天气数据更新快,缓存30分钟
+        }
+
         print(f"✅ 高德地图服务初始化成功")
-    
+
+    def _cache_get(self, key: str, ttl: int) -> Optional[str]:
+        """读取缓存, 过期则清除并返回None"""
+        item = self._cache.get(key)
+        if item is None:
+            return None
+        cached_at, value = item
+        if time.time() - cached_at > ttl:
+            del self._cache[key]
+            return None
+        return value
+
+    def _cache_set(self, key: str, value: str) -> None:
+        """写入缓存"""
+        self._cache[key] = (time.time(), value)
+
     async def search_poi(self, keywords: str, city: str, citylimit: bool = True) -> List[POIInfo]:
         """
         搜索POI
@@ -90,16 +114,13 @@ class AmapService:
     
     def search_poi_sync(self, keywords: str, city: str, citylimit: bool = True) -> str:
         """
-        同步搜索POI（用于同步工具调用）
-        
-        Args:
-            keywords: 搜索关键词
-            city: 城市
-            citylimit: 是否限制在城市范围内
-            
-        Returns:
-            JSON字符串
+        同步搜索POI（用于同步工具调用, 带结果缓存）
         """
+        cache_key = f"poi|{keywords}|{city}|{citylimit}"
+        cached = self._cache_get(cache_key, self._cache_ttl["poi"])
+        if cached is not None:
+            print(f"⚡ POI缓存命中: {keywords} {city}")
+            return cached
         try:
             url = f"{self.base_url}/place/text"
             params = {
@@ -115,22 +136,23 @@ class AmapService:
                 result = response.json()
             
             print(f"POI搜索结果: {json.dumps(result)[:200]}...")
-            return json.dumps(result)
-            
+            json_str = json.dumps(result)
+            self._cache_set(cache_key, json_str)
+            return json_str
+
         except Exception as e:
             print(f"❌ POI搜索失败: {str(e)}")
             return json.dumps({"error": str(e), "data": []})
     
     def get_weather_sync(self, city: str) -> str:
         """
-        同步查询天气（用于同步工具调用）
-        
-        Args:
-            city: 城市名称
-            
-        Returns:
-            JSON字符串
+        同步查询天气（用于同步工具调用, 带结果缓存）
         """
+        cache_key = f"weather|{city}"
+        cached = self._cache_get(cache_key, self._cache_ttl["weather"])
+        if cached is not None:
+            print(f"⚡ 天气缓存命中: {city}")
+            return cached
         try:
             url = f"{self.base_url}/weather/weatherInfo"
             params = {
@@ -144,8 +166,10 @@ class AmapService:
                 result = response.json()
             
             print(f"天气查询结果: {json.dumps(result)[:200]}...")
-            return json.dumps(result)
-            
+            json_str = json.dumps(result)
+            self._cache_set(cache_key, json_str)
+            return json_str
+
         except Exception as e:
             print(f"❌ 天气查询失败: {str(e)}")
             return json.dumps({"error": str(e), "data": []})
